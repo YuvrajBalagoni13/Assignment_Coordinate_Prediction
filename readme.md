@@ -4,6 +4,7 @@
 
 Using Deep Learning techniques, predict the coordinates (x,y) of a pixel which has a value of
 255 for 1 pixel in a given 50x50 pixel grayscale image and all other pixels are 0.
+You can test the codes both with scripts & the notebook 'coordinate_predictor.ipynb' too.
 
 ## Installation
 
@@ -33,7 +34,7 @@ python create_dataset.py \
 As the problem was fairly simple, I focused more on keeping the model pretty simple.
 I did 2 approaches :
 1. Simple Convolution + MLP based regression.
-2. Spatial Softmax based convolution approach.
+2. Spatial Softmax based convolution approach. In this approach the model predicts a 2 dimensional joint probability distribution for the white pixel.
 
 out of these 2, spatial softmax approach performed the best.
 

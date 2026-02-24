@@ -86,7 +86,10 @@ class CoordinateRegressorSpatialSoftmax(nn.Module):
         x = F.relu(self.bn2(self.conv2(x)))
         logits = self.logits_conv(x)
         logits = logits.squeeze(1)
-        probs = self.spatial_softmax(logits)
+        probs = self.spatial_softmax(logits)  
+
+        # Here if we could have goten coordinates with argmax but that would have been non-differentiable
+        # That's why we do this ->
         x_pred = torch.einsum("bhw,hw->b", probs, self.grid_x)
         y_pred = torch.einsum("bhw,hw->b", probs, self.grid_y)
         output = torch.stack([x_pred, y_pred], dim=1) / 50.0
