@@ -18,7 +18,7 @@ pip install -r requirements.txt
 ## Creating Dataset
 
 So we need to create dataset with images size 50 x 50, which had only pixel value as 255 (white) & rest 0 (black).
-Based on the image size the total number of possible images are 50 * 50 = 2500 images. So, I generated this dataset & split them in 80-10-10 for train-val-test.
+Based on the image size the total number of possible images are 50 * 50 = 2500 images. So, I generated this dataset & split them in 80-10-10 for train-val-test. (2000 - 250 - 250 samples)
 
 To create dataset, you can run:
 ``` bash
@@ -28,6 +28,7 @@ python create_dataset.py \
 --train_split 0.8 \
 --seed 42
 ```
+this will create images & a target_coordinates.json file which will have coordinates corresponding to each image id.
 
 ## Model
 
