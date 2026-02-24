@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 from tqdm.auto import tqdm
 import wandb
+import argparse
 
 import model 
 import dataloaders
@@ -61,16 +62,23 @@ def get_lenient_accuracy(
     correct = (distances <= threshold).float().mean()
     return correct
 
-def train():
-    wandb.init(project="CoordinatePrediction", name="base_model_again", config={
-        "name": "base_model_again",
-        "epochs": 100,
-        "batch_size": 32,
-        "learning_rate": 0.001,
+def train(
+        name: str,
+        epochs: int,
+        batch_size: int,
+        learning_rate: float,
+        model_name: str,
+        early_stop: bool
+):
+    wandb.init(project="CoordinatePrediction", name=name, config={
+        "name": name,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
         "description": "deepening the base model",
     })
     configs = wandb.config
-    run_name = configs.name
+    run_name = name
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -84,7 +92,12 @@ def train():
     val_dataloader = data_loaders['val']
     criterion = nn.MSELoss()
 
-    coordinateregressor = model.CoordinateRegressor(input_shape=1, mlp_units=128, output_shape=2).to(device)
+    if model_name == "simple_conv":
+        coordinateregressor = model.CoordinateRegressor(input_shape=1, mlp_units=128, output_shape=2).to(device)
+    elif model_name == "spatial_softmax":
+        coordinateregressor = model.CoordinateRegressorSpatialSoftmax(input_shape=1, output_shape=2).to(device)
+    else:
+        coordinateregressor = model.NeuralNetRegressor(input_shape=1, mlp_units=128, output_shape=2).to(device)
 
     model_optim = torch.optim.AdamW(
         params = coordinateregressor.parameters(),
@@ -98,13 +111,12 @@ def train():
     earlystoping_threshold = 1e-6        # Threshold for early stoping counts to increase
 
     for epoch in tqdm(range(configs.epochs)):
-        print (f"epoch {epoch + 1}")
 
         ##################### Training Loop #####################
 
         mean_loss, mean_accuracy = 0.0, 0.0
 
-        for samples in tqdm(train_dataloader):
+        for samples in train_dataloader:
             samples['image'], samples['coordinates'] = samples['image'].to(device), samples['coordinates'].to(device)
             coordinateregressor.train()
             output = coordinateregressor(samples['image'])
@@ -124,7 +136,8 @@ def train():
         mean_val_loss, mean_val_accuracy = 0.0, 0.0
         coordinateregressor.eval()
         with torch.inference_mode():
-            for samples in tqdm(val_dataloader):
+            for samples in val_dataloader:
+                samples['image'], samples['coordinates'] = samples['image'].to(device), samples['coordinates'].to(device)
                 output = coordinateregressor(samples['image'])
                 ground_truth = samples['coordinates'].float()
 
@@ -135,18 +148,18 @@ def train():
                 mean_val_loss += loss.item() / len(val_dataloader)     
 
         ##################### Handling Early Stoping #####################
-        if (prev_min_train_loss - mean_val_loss) <= earlystoping_threshold:
-            count += 1
-            if count >= early_stoping_count:
-                print(f"Stoping early epoch {epoch + 1} due to no major change in loss | train loss {mean_loss:.5f} train accuracy {mean_accuracy:.5f} val loss {mean_val_loss:.5f} val accuracy {mean_val_accuracy:.5f}")
-                save_checkpoint(epoch, run_name, coordinateregressor, loss, configs.description)
-                break
-        else:
-            count = 0  
-            prev_min_train_loss = min(prev_min_train_loss, mean_val_loss)
+        if early_stop:
+            if (prev_min_train_loss - mean_val_loss) <= earlystoping_threshold:
+                count += 1
+                if count >= early_stoping_count:
+                    print(f"Stoping early epoch {epoch + 1} due to no major change in loss | train loss {mean_loss:.5f} train accuracy {mean_accuracy:.5f} val loss {mean_val_loss:.5f} val accuracy {mean_val_accuracy:.5f}")
+                    save_checkpoint(epoch, run_name, coordinateregressor, loss, configs.description)
+                    break
+            else:
+                count = 0  
+                prev_min_train_loss = min(prev_min_train_loss, mean_val_loss)
 
         ##################### logging & saving checkpoints #####################
-
         if epoch % 10 == 0:
             log_metrics(epoch, mean_loss, mean_accuracy, mean_val_loss, mean_val_accuracy)
             print(f"Epoch {epoch + 1} | mse loss: {mean_loss:.5f} | accuracy: {mean_accuracy:.5f}")
@@ -155,8 +168,71 @@ def train():
             save_checkpoint(epoch, run_name, coordinateregressor, loss, configs.description)
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(
+        description="training"
+    )
+
+    parser.add_argument(
+        "--name",
+        type=str,
+        required=True,
+        default='base_model',
+        help="name of the current run"
+    )
+
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        required=True,
+        default=100,
+        help="number of epochs to run the training"
+    )
+    
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=32,
+        help="batch size of the dataloaders"
+    )
+
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        required=True,
+        default=0.001,
+        help="learning rate for the training"
+    )
+
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="simple_conv",
+        help="the model which is to be trained"
+    )
+
+    parser.add_argument(
+        "--early_stop",
+        type=bool,
+        default=False,
+        help="early stopping of the training"
+    )
+
+    args = parser.parse_args()
+    train(
+        name = args.name,
+        epochs = args.epochs,
+        batch_size = args.batch_size,
+        learning_rate = args.learning_rate,
+        model_name = args.model_name,
+        early_stop = args.early_stop
+    )
 
 """
-python train.py
+python train.py \
+--name neural_nets \
+--epochs 100 \
+--batch_size 32 \
+--learning_rate 0.001 \
+--model_name neural_nets \
+--early_stop True
 """

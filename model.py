@@ -22,10 +22,14 @@ class CoordinateRegressor(nn.Module):
         self.bn3 = nn.BatchNorm2d(64)
         self.pool3 = nn.MaxPool2d(kernel_size=2) # Reduces image to 6x6
         
-        self.fc1 = nn.Linear(64 * 6 * 6, mlp_units) # Fully Connected Block
+        size = image_size
+        for _ in range(3):
+            size = (size - 2) // 2 + 1   
+        flatten_dim = 64 * size * size
+
+        self.fc1 = nn.Linear(flatten_dim, mlp_units) # Fully Connected Block
         self.fc2 = nn.Linear(mlp_units, output_shape) 
 
-        self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.pool1(F.relu(self.bn1(self.conv1(x))))
@@ -35,13 +39,12 @@ class CoordinateRegressor(nn.Module):
         x = x.view(x.size(0), -1)    # Flatten layer
         
         x = F.relu(self.fc1(x))
-        x = self.dropout(x)
         x = self.fc2(x) 
         
         return torch.sigmoid(x)
 
 
-# Conv model with Spatial Softmax - Performed poorly may be due to small receptive fields
+# Conv model with Spatial Softmax 
 class SpatialSoftmax(nn.Module):
     def __init__(self, temperature: float = 1.0) -> None:
         super().__init__()
@@ -55,24 +58,18 @@ class SpatialSoftmax(nn.Module):
         return probs
     
 class CoordinateRegressorSpatialSoftmax(nn.Module):
-    """CNN architecture for predicting (x, y) coordinates of a pixel."""
+    """CNN architecture for predicting (x, y) coordinates of a pixel with spatial softmax."""
 
-    def __init__(self, input_shape:int, mlp_units:int, output_shape:int, image_size: int = 50):
+    def __init__(self, input_shape:int, output_shape:int, image_size: int = 50):
         super(CoordinateRegressorSpatialSoftmax, self).__init__()
 
         self.image_size = image_size
 
         self.conv1 = nn.Conv2d(in_channels=input_shape, out_channels=16, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(16)
-        # self.pool1 = nn.MaxPool2d(kernel_size=2) # Reduces image to 25x25
         
         self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(32)
-        # self.pool2 = nn.MaxPool2d(kernel_size=2) # Reduces image to 12x12
-        
-        # self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
-        # self.bn3 = nn.BatchNorm2d(64)
-        # self.pool3 = nn.MaxPool2d(kernel_size=2) # Reduces image to 6x6
 
         self.logits_conv = nn.Conv2d(in_channels = 32, out_channels=1, kernel_size=1)
         self.spatial_softmax = SpatialSoftmax()
@@ -81,8 +78,8 @@ class CoordinateRegressorSpatialSoftmax(nn.Module):
         y_coords = torch.arange(image_size, dtype=torch.float32)
 
         grid_x, grid_y = torch.meshgrid(x_coords, y_coords, indexing='xy')
-        self.register_buffer('grid_x', grid_x)
-        self.register_buffer('grid_y', grid_y)
+        self.register_buffer('grid_x', grid_x.clone())
+        self.register_buffer('grid_y', grid_y.clone())
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = F.relu(self.bn1(self.conv1(x)))
@@ -96,7 +93,7 @@ class CoordinateRegressorSpatialSoftmax(nn.Module):
         return output
 
 
-# also performed poorly - not able to grasp the spatial structure.
+# performed poorly - not able to grasp the spatial structure.
 class NeuralNetRegressor(nn.Module):
     def __init__(self, input_shape: int, mlp_units: int, output_shape: int, dropout_rate: float = 0.3) -> None:
         super(NeuralNetRegressor, self).__init__()

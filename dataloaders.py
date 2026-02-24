@@ -56,15 +56,6 @@ def get_dataloaders(
 ) -> dict:
     """
     gives a dictionary of dataloaders for train, val & test
-
-    Args:
-        dataset_dir (str): directory path for the dataset
-        batch_size (int): batch size of the dataloaders
-        shuffle (bool): to shuffle or not
-        device (str): device
-    
-    Returns:
-        dataloaders (dict): dictionary of dataloaders for train, val & test
     """
     coordinates_json_path = os.path.join(dataset_dir, "target_coordinates.json")
     datasets = {x : CoordinateDataset(os.path.join(dataset_dir, "images", x), coordinates_json_path, device, transforms.ToTensor()) 
