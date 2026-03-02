@@ -38,7 +38,6 @@ class CoordinateDataset(torch.utils.data.Dataset):
             image = Image.open(os.path.join(self.image_dir, f"{sample_name}.png"))
             if self.transforms:
                 image = self.transforms(image)
-                # image /= 255.0
             return {
                 'image' : image,
                 'coordinates' : coordinates
